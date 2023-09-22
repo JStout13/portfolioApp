@@ -10,12 +10,16 @@ import SwiftUI
 struct SidebarView: View {
     @EnvironmentObject var dataController: DataController
     @FetchRequest(sortDescriptors: [SortDescriptor(\.name)]) var tags: FetchedResults<Tag>
+    @State private var tagToRename: Tag?
+    @State private var renamingTag = false
+    @State private var tagName = ""
+    @State private var showingAwards = false
     
     let smartFilters: [Filter] = [.all, .recent]
     
     var tagFilters: [Filter] {
         tags.map { tag in
-            Filter(id: tag.id ?? UUID(), name: tag.name ?? "No Name", icon: "tag", tag: tag)
+            Filter(id: tag.tagID, name: tag.tagName, icon: "tag", tag: tag)
         }
     }
     
@@ -33,8 +37,23 @@ struct SidebarView: View {
                 ForEach(tagFilters) { filter in
                     NavigationLink(value: filter) {
                         Label(filter.name, systemImage: filter.icon)
+                            .badge(filter.tag?.tagActiveIssues.count ?? 0)
+                            .contextMenu {
+                                Button {
+                                    rename(filter)
+                                } label: {
+                                    Label("Rename", systemImage: "pencil")
+                                }
+                                
+                                Button(role: .destructive) {
+                                    delete(filter)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                     }
                 }
+                .onDelete(perform: delete)
             }
         }
         .toolbar {
@@ -44,6 +63,48 @@ struct SidebarView: View {
             } label: {
                 Label("ADD SAMPLES", systemImage: "flame")
             }
+            
+            Button(action: dataController.newTag) {
+                Label("Add Tag", systemImage: "plus")
+            }
+            
+            Button {
+                showingAwards.toggle()
+            } label: {
+                Label("Show Awards", systemImage: "rosette")
+            }
+        }
+        .alert("Rename Tag", isPresented: $renamingTag) {
+            Button("OK", action: completeRename)
+            Button("Cancel", role: .cancel) {}
+            TextField("New Name", text: $tagName)
+        }
+        .sheet(isPresented: $showingAwards, content: AwardsView.init)
+        .navigationTitle("Filters")
+    }
+    
+    func rename(_ filter: Filter) {
+        tagToRename = filter.tag
+        tagName = filter.name
+        renamingTag = true
+    }
+    
+    func completeRename() {
+        tagToRename?.name = tagName
+        dataController.save()
+    }
+    
+    func delete(_ filter: Filter) {
+        guard let tag = filter.tag else { return }
+        
+        dataController.delete(tag)
+        dataController.save()
+    }
+    
+    func delete(_ offsets: IndexSet) {
+        for offset in offsets {
+            let item = tags[offset]
+            dataController.delete(item)
         }
     }
 }
